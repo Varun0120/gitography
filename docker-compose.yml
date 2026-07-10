@@ -1,0 +1,66 @@
+# CodeMap - Docker Compose
+# Four services: postgres (db), backend (api), frontend (ui), nginx (reverse proxy)
+# Run everything with:  docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-codemap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codemap_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-codemap}
+    volumes:
+      # Named volume so the database survives container restarts
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codemap"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # NOTE: no "ports" exposed - only other containers can reach it.
+    # This is a security best practice: the DB is never public.
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-codemap}:${POSTGRES_PASSWORD:-codemap_dev_password}@postgres:5432/${POSTGRES_DB:-codemap}
+      PORT: 4000
+      # Sandboxing limits for untrusted repos (Week 1 lesson!)
+      MAX_REPO_MB: 100
+      MAX_FILES: 500
+      CLONE_TIMEOUT_MS: 60000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Resource limits: the parser handles UNTRUSTED code from the internet.
+    # If someone submits a malicious/huge repo, these caps protect the server.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    # tmpfs = cloned repos live in RAM and vanish when container stops.
+    # Nothing untrusted ever touches the real disk.
+    tmpfs:
+      - /tmp/codemap-clones:size=200m
+
+  frontend:
+    build: ./frontend
+    environment:
+      # The browser talks to nginx, nginx routes /api to the backend
+      NEXT_PUBLIC_API_URL: /api
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"   # The ONLY door into the whole system: http://localhost:8080
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  pgdata:

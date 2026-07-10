@@ -1,0 +1,14 @@
+{
+  "name": "gitography-backend",
+  "version": "0.1.0",
+  "description": "Gitography API - clones repos and builds dependency graphs",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  }
+}
