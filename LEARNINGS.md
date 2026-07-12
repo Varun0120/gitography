@@ -81,10 +81,67 @@ only have one door to lock down and watch, instead of three.
 
 ## Week 2 — The parser
 ### What we built
+Added `ts-morph` to the backend and wrote `parser.js`, which reads every
+JS/TS file the Week 1 file walker found, builds its AST, and pulls out
+every import — both modern `import ... from "./x"` (ESM) and older
+`const x = require("./x")` (CommonJS), since real repos like Express still
+use the old style. Each import gets resolved to a real file on disk
+(handling extensionless imports, folders with an `index` file, and
+skipping npm packages). `POST /analyze` now returns a real graph —
+`{ nodes: [{id, path, size}], edges: [{from, to}] }` — instead of a flat
+file list. Added a Postgres `graph_cache` table keyed by `(repo,
+commit_hash)`, so re-analyzing a commit we've already parsed skips parsing
+entirely and returns instantly with `cached: true`.
+
+Verified live: `expressjs/express` first returned 0 edges (a real bug —
+our parser only recognized `import`, not `require`) — fixed by detecting
+`require()` calls too, then it correctly returned 141 nodes / 158 edges.
+Cache tested with a real hit/miss cycle (2.29s miss → 1.09s hit) and
+confirmed the actual row stored in Postgres.
+
 ### Questions I must be able to answer
 - What is an AST? Why is parsing better than regex for finding imports?
 - How does ts-morph resolve `import x from "./utils"` to an actual file?
+- Why does the cache key use commit hash instead of just the repo name?
+- Why does detecting `require(...)` require scanning for call expressions
+  instead of a dedicated AST node like `import` has?
+
 ### My answers
+
+**AST / regex vs parsing:** An AST (Abstract Syntax Tree) is a tree that
+represents the grammatical structure of code — like a grammar teacher
+diagramming a sentence into subject/verb/object, but for code. Regex can't
+reliably find every import because imports come in many valid shapes
+(`import x`, `import {a,b}`, multi-line, `require(...)`, text that merely
+looks like an import inside a comment or string) — a pattern search either
+misses real ones or matches fake ones. ts-morph uses the same grammar
+engine as the real TypeScript compiler, so it understands meaning, not
+just text shape.
+
+**How ts-morph resolves imports:** ts-morph itself just tells us the raw
+import string (e.g. `"./utils"`) — resolving *that* to a real file on disk
+is logic I wrote myself in `resolveImportPath()`: try the path as-is, then
+try appending each extension (`.ts`, `.js`, etc.), then if it's a folder,
+look for its `index` file. Only relative paths (starting with `.`) get
+resolved — bare names like `"express"` are npm packages, not files in the
+repo.
+
+**Why commit hash, not just repo name:** The cache has to guarantee
+correctness, not just speed. If I cached by repo name alone, a new commit
+pushed tomorrow would incorrectly get served yesterday's stale graph.
+`commit_hash` is a fingerprint of the exact code — same hash always means
+identical files, so it's always safe to reuse; a different hash
+automatically causes a fresh parse, with no manual cache-expiry logic
+needed.
+
+**Why require() needs a different detection method:** `require(...)`
+isn't special language syntax the way `import` is — it's just a normal
+function call that happens to be named `require`. There's no dedicated
+"this is an import" AST node for it like `ImportDeclaration`. So the code
+scans every function-call node in the file and checks whether the function
+being called is literally named `require` with one string argument.
+
+---
 
 ---
 

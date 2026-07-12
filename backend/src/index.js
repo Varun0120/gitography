@@ -5,6 +5,7 @@
 
 import express from "express";
 import { analyzeRoute } from "./routes/analyze.js";
+import { initDb } from "./services/db.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,6 +19,14 @@ app.get("/health", (_req, res) => {
 
 app.post("/analyze", analyzeRoute);
 
-app.listen(PORT, () => {
-  console.log(`CodeMap backend listening on port ${PORT}`);
-});
+// Create the cache table (if it doesn't exist yet) before accepting traffic.
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`CodeMap backend listening on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database:", err.message);
+    process.exit(1);
+  });

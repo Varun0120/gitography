@@ -72,6 +72,13 @@ export async function cloneRepo(owner, repo) {
   return dir;
 }
 
+// The commit hash of the shallow clone's single commit - this is our cache
+// key. Same repo + same commit hash = identical file contents, guaranteed.
+export async function getCommitHash(dir) {
+  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: dir });
+  return stdout.trim();
+}
+
 export async function cleanup(dir) {
   try {
     await rm(dir, { recursive: true, force: true });

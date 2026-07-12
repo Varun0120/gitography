@@ -6,8 +6,10 @@
 // We validate it strictly BEFORE it goes anywhere near a shell command.
 // Never build shell strings from user input - that's how command injection happens.
 
-import { cloneRepo, cleanup } from "../services/cloner.js";
+import { cloneRepo, cleanup, getCommitHash } from "../services/cloner.js";
 import { walkFiles } from "../services/fileWalker.js";
+import { buildGraph } from "../services/parser.js";
+import { getCachedGraph, saveGraph } from "../services/cache.js";
 
 // Strict GitHub URL pattern: https://github.com/owner/repo (nothing else)
 // Rejects: extra paths, query strings, ../ tricks, non-github hosts
@@ -32,6 +34,21 @@ export async function analyzeRoute(req, res) {
   try {
     // 2. Shallow clone into a sandboxed temp dir (see cloner.js for the limits)
     clonePath = await cloneRepo(owner, repo);
+    const repoKey = `${owner}/${repo}`;
+    const commitHash = await getCommitHash(clonePath);
+
+    // 2b. Cache check - same repo + same commit = identical files, so if
+    // we've already parsed this exact commit before, skip straight to it.
+    const cached = await getCachedGraph(repoKey, commitHash);
+    if (cached) {
+      return res.json({
+        repo: repoKey,
+        fileCount: cached.nodes.length,
+        nodes: cached.nodes,
+        edges: cached.edges,
+        cached: true,
+      });
+    }
 
     // 3. Walk the tree, collect JS/TS files (respecting MAX_FILES cap)
     const result = walkFiles(clonePath);
@@ -43,12 +60,18 @@ export async function analyzeRoute(req, res) {
       });
     }
 
-    // Week 1 output: the file list.
-    // Week 2 will parse these files with ts-morph and return { nodes, edges }.
+    // 4. Parse every file with ts-morph and build the import graph.
+    const graph = buildGraph(clonePath, result.files);
+
+    // 5. Save to cache for next time, keyed by this exact commit.
+    await saveGraph(repoKey, commitHash, graph);
+
     return res.json({
-      repo: `${owner}/${repo}`,
+      repo: repoKey,
       fileCount: result.files.length,
-      files: result.files,
+      nodes: graph.nodes,
+      edges: graph.edges,
+      cached: false,
     });
   } catch (err) {
     console.error("analyze failed:", err.message);
