@@ -111,7 +111,13 @@ export function computeStats(nodes, edges, packageMain = null) {
     ? [...nodes].sort((a, b) => (inDeg.get(b.id) ?? 0) - (inDeg.get(a.id) ?? 0))[0].path
     : null;
 
+  // Orphan = a file nothing imports and that imports nothing itself - a
+  // real "dead code" signal ONLY inside core folders. Test/docs/examples
+  // files are standalone by nature (a test file isn't "dead" just because
+  // nothing imports it), so support folders are excluded here entirely -
+  // otherwise every repo's test suite inflates this number meaninglessly.
   const orphans = nodes
+    .filter((n) => !SUPPORT_FOLDER_RE.test(topFolder(n.path)))
     .filter((n) => (inDeg.get(n.id) ?? 0) === 0 && (outDeg.get(n.id) ?? 0) === 0)
     .map((n) => n.path);
 

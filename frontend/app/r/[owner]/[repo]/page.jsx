@@ -4,10 +4,27 @@
 // should I do next? Answers Law 3 ("what is this?") with stat cards +
 // a tiny static mini-map as an appetizer for the full Map page.
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRepoData } from "./RepoDataContext.jsx";
 import { colorForFolder } from "../../../graphUtils.js";
 import { COLORS, SPACING, RADIUS } from "../../../theme.js";
+
+function fileCountLabel(count) {
+  return `${count} file${count === 1 ? "" : "s"}`;
+}
+
+// Reorder the mini-map so it reads as a story left-to-right: START folder
+// first, the core/engine folder second, everything else after - support
+// (gray) folders pushed to the end, matching the blueprint's mockup order.
+function orderForStory(nodes, entryFolder, coreFolder) {
+  const entryBox = nodes.find((f) => f.id === entryFolder);
+  const coreBox = coreFolder !== entryFolder ? nodes.find((f) => f.id === coreFolder) : null;
+  const rest = nodes
+    .filter((f) => f.id !== entryFolder && f.id !== coreFolder)
+    .sort((a, b) => (a.isSupport === b.isSupport ? b.fileCount - a.fileCount : a.isSupport ? 1 : -1));
+  return [entryBox, coreBox, ...rest].filter(Boolean);
+}
 
 function StatCard({ label, value }) {
   return (
@@ -33,6 +50,31 @@ function healthColor(score) {
 
 export default function OverviewPage() {
   const { data, loading, error, owner, repo } = useRepoData();
+
+  // Design-review request: verify the health score formula computes
+  // correctly by logging its breakdown. Mirrors the backend formula in
+  // stats.js exactly - this is a read-only verification log, not a
+  // second source of truth (the real score always comes from the server).
+  useEffect(() => {
+    if (!data?.stats) return;
+    const { orphans, cycles, entryPoint, healthScore } = data.stats;
+    const orphanPenalty = Math.min(20, orphans.length * 2);
+    const cyclePenalty = Math.min(30, cycles.length * 8);
+    const entryBonus = entryPoint ? 10 : 0;
+    const computed = Math.max(0, Math.min(100, 100 - orphanPenalty - cyclePenalty + entryBonus));
+    console.log(`[Gitography] Health score breakdown for ${data.repo}:`, {
+      base: 100,
+      orphanFiles: orphans.length,
+      orphanPenalty: -orphanPenalty,
+      circularChains: cycles.length,
+      cyclePenalty: -cyclePenalty,
+      hasEntryPoint: Boolean(entryPoint),
+      entryBonus: `+${entryBonus}`,
+      computedScore: computed,
+      serverScore: healthScore,
+      match: computed === healthScore ? "✓ matches" : "✗ MISMATCH",
+    });
+  }, [data]);
 
   if (loading) {
     return (
@@ -108,34 +150,31 @@ export default function OverviewPage() {
         </div>
 
         {/* Static appetizer, not the real map - Law 2 (30-Shape Law) caps
-            this at 8 boxes, not the file count. */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.md }}>
-          {folderGraph.nodes.slice(0, 8).map((f) => {
+            this at 8 boxes, not the file count. Ordered left-to-right as a
+            story: START folder, then the engine, then everything else. */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SPACING.sm, marginTop: SPACING.md }}>
+          {orderForStory(folderGraph.nodes, entryFolder, stats.coreFolder).slice(0, 8).map((f, i) => {
             const isEntryFolder = f.id === entryFolder;
             return (
-              <div
-                key={f.id}
-                style={{
-                  border: `1px solid ${isEntryFolder ? COLORS.accent : COLORS.border}`,
-                  borderRadius: 8, padding: `${SPACING.sm}px ${SPACING.md}px`,
-                  background: COLORS.bg, position: "relative", minWidth: 90,
-                }}
-              >
-                {isEntryFolder && (
-                  <span style={{
-                    position: "absolute", top: -9, left: 8, background: COLORS.accent,
-                    color: COLORS.bg, fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4,
-                  }}>
-                    START
-                  </span>
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: SPACING.sm }}>
+                {i === 1 && (
+                  <span style={{ color: COLORS.textSecondary, fontSize: 12, whiteSpace: "nowrap" }}>opens →</span>
                 )}
-                <p style={{
-                  margin: 0, fontSize: 13, fontWeight: 600,
-                  color: f.isSupport ? COLORS.graphSupport : colorForFolder(f.id),
-                }}>
-                  {f.id}/
-                </p>
-                <p style={{ margin: 0, fontSize: 11, color: COLORS.textSecondary }}>{f.fileCount} files</p>
+                <div
+                  style={{
+                    border: `1px solid ${isEntryFolder ? COLORS.accent : COLORS.border}`,
+                    borderRadius: 8, padding: `${SPACING.sm}px ${SPACING.md}px`,
+                    background: COLORS.bg, minWidth: 90,
+                  }}
+                >
+                  <p style={{
+                    margin: 0, fontSize: 13, fontWeight: 600,
+                    color: f.isSupport ? COLORS.graphSupport : colorForFolder(f.id),
+                  }}>
+                    {isEntryFolder ? `${stats.entryPoint} — START` : `${f.id}/`}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: COLORS.textSecondary }}>{fileCountLabel(f.fileCount)}</p>
+                </div>
               </div>
             );
           })}
