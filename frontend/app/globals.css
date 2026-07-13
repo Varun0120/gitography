@@ -1,0 +1,85 @@
+/* globals.css - base reset + reusable interactive-element classes.
+   Inline styles handle layout/spacing per-component; this file only
+   handles things inline styles can't do (hover, focus, keyframes). */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0B0E14;
+  color: #E6EBF2;
+}
+
+.btn {
+  border: 1px solid #232B38;
+  background: #151A23;
+  color: #E6EBF2;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover {
+  background: #1B2230;
+  border-color: #4D9FFF;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-accent {
+  border: none;
+  background: #4D9FFF;
+  color: #0B0E14;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.btn-accent:hover {
+  filter: brightness(1.1);
+}
+.btn-accent:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.5) brightness(0.8);
+}
+
+.input-field {
+  border: 1px solid #232B38;
+  background: #151A23;
+  color: #E6EBF2;
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+.input-field:hover {
+  border-color: #3a4356;
+}
+.input-field:focus {
+  outline: none;
+  border-color: #4D9FFF;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #8A94A6;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.link-btn:hover {
+  color: #E6EBF2;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #151A23 25%, #1B2230 37%, #151A23 63%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-pulse {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}

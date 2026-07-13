@@ -1,12 +1,17 @@
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], display: "swap" });
+
 export const metadata = {
   title: "Gitography",
-  description: "Google Maps for a codebase",
+  description: "AI agents can answer questions about code — Gitography lets you SEE it.",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif", background: "#0f1520", color: "#e6edf3" }}>
+      <body className={inter.className} style={{ fontSize: 14 }}>
         {children}
       </body>
     </html>

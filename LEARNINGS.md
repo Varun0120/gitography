@@ -145,5 +145,105 @@ being called is literally named `require` with one string argument.
 
 ---
 
-## Week 3 — The map
-(continue the same pattern every week...)
+## Week 3 — The map (Cytoscape.js) + Design System overhaul
+
+### What we built
+Added `cytoscape` to the frontend and built `GraphView.jsx`: a force-directed
+(`cose` layout) interactive graph where nodes = files (colored by folder,
+sized by connection count) and edges = imports, with click-to-inspect side
+panel and a debounced search box that highlights/zooms to matches.
+
+Tested live on a real 227-file repo (`axios/axios`) and found it genuinely
+unreadable — a dense "hairball" of same-weight edges plus a confusing grid
+of disconnected dots at the bottom. Root-caused and fixed:
+- **Orphan grid** — files with zero connections have nothing pulling on
+  them in a force layout, so Cytoscape dumps them in a fallback grid. Fixed
+  by excluding degree-0 nodes from the physics simulation entirely and
+  listing them separately in a collapsible panel instead.
+- **Edge clutter** — every edge was the same brightness, so 150+ edges on
+  screen were all equally illegible. Fixed by dimming edges to near-zero
+  opacity by default and only lighting them up (accent blue) when their
+  node is hovered or selected.
+- **No labels** — nothing was identifiable without clicking. Fixed with
+  always-on labels for the top 10 "hub" (most-connected) files, plus
+  hover-to-reveal labels for everything else.
+- **A real flexbox+canvas resize feedback loop** — the side panel appeared
+  to "slide sideways forever." Root cause: Cytoscape resizes its `<canvas>`
+  to match its container, but the flex column tried to grow to fit the
+  canvas's own pixel size, which had just been resized to match the
+  column — each resize retriggered the other. Fixed with `minWidth: 0` on
+  the flex item, the standard fix for this exact category of bug.
+
+Then adopted a full **Design System** (dark theme, one accent color
+`#4D9FFF`, restricted 3-color-plus-gray folder palette instead of a
+10-color rainbow, 4/8/12/16/24/32px spacing scale, Inter font, hover states
+on every interactive element, skeleton loaders instead of spinners) and
+applied it globally via `theme.js` (shared constants) + `globals.css`
+(hover/skeleton CSS Cytoscape/inline-styles can't express).
+
+### Questions I must be able to answer
+- Why does a force-directed layout put disconnected nodes in a grid, and
+  why is that actually useful information rather than a bug?
+- What problem does dimming edges by default and highlighting on
+  hover/select actually solve?
+- What was the real root cause of the "sliding side panel" bug, and why
+  did `minWidth: 0` fix it?
+- Why cap the folder color palette at 3 colors instead of one per folder?
+
+### My answers
+(deferred — continuing to build first, will come back and answer before
+this feature is marked fully done, per the "never mark done until
+LEARNINGS.md is answered" rule)
+
+---
+
+## Gitography 2.0 — Week 1: multi-page skeleton
+
+### What we built
+A second, larger redesign: after the restyled force-graph still proved
+hard to parse on a 227-file repo, pivoted from "one page trying to show
+everything" to a 6-page guided app (Home, Overview, Map, Tour, Health,
+History), governed by three rules — words before pictures, the **30-Shape
+Law** (no screen ever shows more than ~30 visual items), and one idea per
+page.
+
+Built this week: all 6 Next.js App Router routes exist (`/`,
+`/r/[owner]/[repo]`, `/map`, `/tour`, `/health`, `/history`); a persistent
+top bar with Overview/Map/Tour/Health tabs and a Simple/Developer toggle
+(`RepoDataContext.jsx` + `layout.jsx`); the Home page (hero, input, 3
+example-repo chips, honest-stage "progress theater" while analyzing); and
+the Overview page with real derived stats (no AI yet) — stat cards for
+entry point, core folder, most-relied-upon file, and a health score, plus
+a tiny static mini-map (max 8 folder boxes) as an appetizer for the full
+Map page.
+
+Backend `POST /analyze` response shape changed to
+`{ fileGraph, folderGraph, stats, techStack, ai, cached }` — one call, one
+cached row, every future page reads from it. New: `stats.js` (entry-point
+detection, core folder, top file, orphan/cycle detection, health score
+formula) and `folderGraph.js` (aggregates the file graph into one box per
+top-level folder). Found and fixed a real bug live: entry-point detection
+first picked a *test file* on `expressjs/cors` because the fallback
+heuristic considered all files, not just non-test ones — fixed with a
+priority chain (package.json's `main` field → conventional root filename →
+index file inside the core folder → highest out-degree among non-support
+files only).
+
+Verified end-to-end on `axios/axios`: correct entry point (`index.js`),
+core folder (`lib/`), top file (`lib/utils.js`), health score (90/100),
+and an accurate 8-folder mini-map with the START badge correctly placed on
+the `(root)/` box.
+
+### Questions I must be able to answer
+- Why does `app/r/[owner]/[repo]/page.jsx` match both `/r/axios/axios` and
+  `/r/expressjs/express`?
+- Why does the top bar only need to be written once, in `layout.jsx`,
+  instead of once per page?
+- Why did we have to `TRUNCATE` the `graph_cache` table after changing the
+  `/analyze` response shape — what would have broken if we hadn't?
+- What was wrong with the original entry-point detection logic, and what
+  fixed it?
+
+### My answers
+(deferred — continuing to build first, will come back and answer before
+this feature is marked fully done)
